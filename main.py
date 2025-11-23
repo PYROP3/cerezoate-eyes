@@ -2,11 +2,13 @@ import logging
 
 from Eyes import Eyes
 from Nose import Nose
+from Oled import OLED
 
 logging.basicConfig()
 
-nose = Nose()
-eyes = Eyes(nose)
+oled = OLED()
+nose = Nose(oled)
+eyes = Eyes(nose, oled)
 nose.set_eyes(eyes)
 
 if __name__ == '__main__':

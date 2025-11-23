@@ -16,10 +16,11 @@ from PIL import Image,ImageDraw,ImageFont
 logging.basicConfig(level=logging.DEBUG)
 
 class Eyes:
-    def __init__(self, nose):
+    def __init__(self, nose, oled):
         self.images = []
         self.idx = 0
         self.nose = nose
+        self.oled = oled
         self.nose.on_click = self.next_eyes
         self.kill_switch = False
         self.init_disp()
@@ -83,7 +84,7 @@ class Eyes:
         return frame_data
 
     def _load_folder(self, folder):
-        for eye in os.listdir(f'eyes/{folder}'):
+        for eye in sorted(os.listdir(f'eyes/{folder}')):
             logging.debug(f'Checking {folder}/{eye}')
             files = os.listdir(f'eyes/{folder}/{eye}')
             if len(files) == 1: # The same for both eyes
@@ -106,16 +107,20 @@ class Eyes:
             self.images.append((frame_data_l, frame_data_r))
 
     def load_images(self):
+        message = 'Welcome Cerezoate~\n\nLoading...\n'
+        self.oled.on_state_update('loading', True)
         if self.nose.ad_mode:
-            self.display_dbg('Loading...\nAD ON >:3')
-        else:
-            self.display_dbg('Loading...')
+            message += 'AD ON >:3'
+
+        self.display_dbg(message)
 
         self._load_folder('normal')
 
         if self.nose.ad_mode:
             self._load_folder('AD')
 
+        self.oled.on_state_update('loading', False)
+        self.oled.on_state_update('loaded', len(self.images))
         self.display_dbg(f'Loading...\nLoaded {len(self.images)}')
 
     def cleanup(self):
@@ -128,6 +133,7 @@ class Eyes:
     def next_eyes(self):
         self.idx += 1
         self.idx %= len(self.images)
+        self.oled.on_state_update('eye', self.idx)
 
     def display_loop(self, left):
 

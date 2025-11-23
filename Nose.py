@@ -7,11 +7,17 @@ from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
 logging.basicConfig(level=logging.DEBUG)
 
+BUTTON_DEBOUNCE = 0.01
+BUTTON_LONG_HOLD = 10
+BUTTON_SHORT_HOLD = 1
+
 class Nose:
-    def __init__(self, pin = 24, fans_pin = 23, pull_up = True, active_state = True):
+    def __init__(self, oled, pin = 24, fans_pin = 23, pull_up = True, active_state = True):
+        self.oled = oled
         self.button = DigitalInputDevice(pin, pull_up=pull_up)
         self.fans = DigitalOutputDevice(fans_pin, active_high=True, initial_value=False)
         self.ad_mode = self.state()
+        self.oled.on_state_update('ad', self.ad_mode)
         logging.info(f'Nose startup AD mode={self.ad_mode}')
 
         self._last_state = self.state()
@@ -24,6 +30,7 @@ class Nose:
         self.on_long_hold = None
 
         self.fans_on = False
+        self.fans.value = True
 
         self.eyes = None
 
@@ -43,10 +50,14 @@ class Nose:
     def _on_hold(self):
         logging.info('Hold')
         self.fans_on = not self.fans_on
-        self.fans.value = self.fans_on
+        self.fans.value = not self.fans_on
+
+        self.oled.on_state_update('fan', self.fans_on)
 
     def _on_long_hold(self):
         logging.info('Long hold')
+
+        self.oled.display_raw('Goodbye Dot~! <3')
 
         if self.eyes is not None:
             self.eyes.stop_display()
@@ -62,16 +73,16 @@ class Nose:
             # Button was just pressed, ignore
             return
 
-        if duration < 0.01:
+        if duration < BUTTON_DEBOUNCE:
             # Noise, ignore
             return
 
         logging.debug(f'handling falling edge, {duration=}')
 
-        if duration < 1:
+        if duration < BUTTON_SHORT_HOLD:
             return self._on_click()
 
-        if duration < 3:
+        if duration < BUTTON_LONG_HOLD:
             return self._on_hold()
 
         return self._on_long_hold()
