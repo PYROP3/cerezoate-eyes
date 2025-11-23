@@ -1,0 +1,90 @@
+import os
+import sys
+import time
+import logging
+import threading
+from gpiozero import DigitalInputDevice
+
+logging.basicConfig(level=logging.DEBUG)
+
+class Nose:
+    def __init__(self, pin = 24, pull_up = True, active_state = True):
+        self.button = DigitalInputDevice(pin, pull_up=pull_up)
+        self.ad_mode = self.state()
+        logging.info(f'Nose startup AD mode={self.ad_mode}')
+
+        self._last_state = self.state()
+        self._last_state_change = time.monotonic()
+
+        self.kill_switch = False
+
+        self.on_click = None
+        self.on_hold = None
+        self.on_long_hold = None
+
+    def state(self):
+        state = self.button.value == 1
+        # logging.debug(f'State={state}')
+        return state
+
+    def _on_click(self):
+        logging.info('Click')
+        if self.on_click is not None:
+            self.on_click()
+
+    def _on_hold(self):
+        logging.info('Hold')
+
+    def _on_long_hold(self):
+        logging.info('Long hold')
+
+    def handle(self, edge, duration):
+        if edge:
+            # Button was just pressed, ignore
+            return
+
+        if duration < 0.01:
+            # Noise, ignore
+            return
+
+        logging.debug(f'handling falling edge, {duration=}')
+
+        if duration < 1:
+            return self._on_click()
+
+        if duration < 10:
+            return self._on_hold()
+
+        return self._on_long_hold()
+
+    def poll(self):
+        new_state = self.state()
+        if new_state != self._last_state:
+            now = time.monotonic()
+            self.handle(new_state, now - self._last_state_change)
+            self._last_state = new_state
+            self._last_state_change = now
+
+    def polling_thread(self):
+        while not self.kill_switch:
+            self.poll()
+
+    def start_polling(self):
+        self.thread = threading.Thread(target=self.polling_thread)
+        self.thread.start()
+
+    def stop_polling(self):
+        self.kill_switch = True
+        self.thread.join()
+
+if __name__ == '__main__':
+    nose = Nose()
+
+    nose.start_polling()
+
+    try:
+        while True:
+            pass
+    except:
+        logging.info('quit')
+        nose.stop_polling()

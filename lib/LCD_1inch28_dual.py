@@ -1,5 +1,6 @@
 
 import time
+import logging
 from . import lcdconfig
 
 class LCD_1inch28_Dual(lcdconfig.RaspberryPi):
@@ -287,7 +288,28 @@ class LCD_1inch28_Dual(lcdconfig.RaspberryPi):
         for i in range(0,len(buffer),4096):
             self.spi_writebyte(buffer[i:i+4096], left)
 
-    def ShowImage(self,Image, left):
+    def ShowImage(self,Image, left, autorotate=True):
+        """Set buffer to value of Python Imaging Library image."""
+        """Write display buffer to physical display"""
+        imwidth, imheight = Image.size
+        if imwidth != self.width or imheight != self.height:
+            raise ValueError(f'Image must be same dimensions as display \
+                ({self.width}x{self.height}).')
+
+        if autorotate and left: # TODO maybe not left?
+            Image = Image.rotate(180)
+
+        img = self.np.asarray(Image)
+        pix = self.np.zeros((self.width,self.height,2), dtype = self.np.uint8)
+        pix[...,[0]] = self.np.add(self.np.bitwise_and(img[...,[0]],0xF8),self.np.right_shift(img[...,[1]],5))
+        pix[...,[1]] = self.np.add(self.np.bitwise_and(self.np.left_shift(img[...,[1]],3),0xE0),self.np.right_shift(img[...,[2]],3))
+        self.send_buffer(pix.flatten().tolist(), left)
+        # self.SetWindows ( 0, 0, self.width, self.height)
+        # self.digital_write(self.DC_PIN,True)
+        # for i in range(0,len(pix),4096):
+        #     self.spi_writebyte(pix[i:i+4096], left)
+
+    def ShowImageEqual(self,Image, autorotate=True):
         """Set buffer to value of Python Imaging Library image."""
         """Write display buffer to physical display"""
         imwidth, imheight = Image.size
@@ -298,11 +320,26 @@ class LCD_1inch28_Dual(lcdconfig.RaspberryPi):
         pix = self.np.zeros((self.width,self.height,2), dtype = self.np.uint8)
         pix[...,[0]] = self.np.add(self.np.bitwise_and(img[...,[0]],0xF8),self.np.right_shift(img[...,[1]],5))
         pix[...,[1]] = self.np.add(self.np.bitwise_and(self.np.left_shift(img[...,[1]],3),0xE0),self.np.right_shift(img[...,[2]],3))
-        self.send_buffer(pix.flatten().tolist(), left)
-        # self.SetWindows ( 0, 0, self.width, self.height)
-        # self.digital_write(self.DC_PIN,True)
-        # for i in range(0,len(pix),4096):
-        #     self.spi_writebyte(pix[i:i+4096], left)
+        self.send_buffer(pix.flatten().tolist(), False)
+
+        if not autorotate:
+            self.send_buffer(pix.flatten().tolist(), True)
+            return
+
+        Image = Image.rotate(180)
+        img = self.np.asarray(Image)
+        pix = self.np.zeros((self.width,self.height,2), dtype = self.np.uint8)
+        pix[...,[0]] = self.np.add(self.np.bitwise_and(img[...,[0]],0xF8),self.np.right_shift(img[...,[1]],5))
+        pix[...,[1]] = self.np.add(self.np.bitwise_and(self.np.left_shift(img[...,[1]],3),0xE0),self.np.right_shift(img[...,[2]],3))
+        self.send_buffer(pix.flatten().tolist(), True)
+
+    def ShowImageRaw(self, image, left):
+        self.SetWindows ( 0, 0, self.width, self.height, left)
+        self.digital_write(self.DC_PIN,True)
+        for block in image:
+            # logging.debug(f'Writing block len={len(block)}')
+            # logging.debug(f'{block=}')
+            self.spi_writebyte(block, left)
 
     def clear(self, left):
         """Clear contents of image buffer"""

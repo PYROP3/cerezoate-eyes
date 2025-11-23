@@ -85,7 +85,7 @@ class RaspberryPi:
             if self.SPI_L is not None:
                 self.SPI_L.writebytes(data)
         else:
-            if self.SPI_R is notNone:
+            if self.SPI_R is not None:
                 self.SPI_R.writebytes(data)
 
     def bl_DutyCycle(self, duty):
