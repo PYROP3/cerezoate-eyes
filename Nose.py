@@ -3,13 +3,14 @@ import sys
 import time
 import logging
 import threading
-from gpiozero import DigitalInputDevice
+from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
 logging.basicConfig(level=logging.DEBUG)
 
 class Nose:
-    def __init__(self, pin = 24, pull_up = True, active_state = True):
+    def __init__(self, pin = 24, fans_pin = 23, pull_up = True, active_state = True):
         self.button = DigitalInputDevice(pin, pull_up=pull_up)
+        self.fans = DigitalOutputDevice(fans_pin, active_high=True, initial_value=False)
         self.ad_mode = self.state()
         logging.info(f'Nose startup AD mode={self.ad_mode}')
 
@@ -21,6 +22,13 @@ class Nose:
         self.on_click = None
         self.on_hold = None
         self.on_long_hold = None
+
+        self.fans_on = False
+
+        self.eyes = None
+
+    def set_eyes(self, eyes):
+        self.eyes = eyes
 
     def state(self):
         state = self.button.value == 1
@@ -34,9 +42,20 @@ class Nose:
 
     def _on_hold(self):
         logging.info('Hold')
+        self.fans_on = not self.fans_on
+        self.fans.value = self.fans_on
 
     def _on_long_hold(self):
         logging.info('Long hold')
+
+        if self.eyes is not None:
+            self.eyes.stop_display()
+
+        time.sleep(0.5)
+
+        self.stop_polling()
+
+        os._exit(0)
 
     def handle(self, edge, duration):
         if edge:
@@ -52,7 +71,7 @@ class Nose:
         if duration < 1:
             return self._on_click()
 
-        if duration < 10:
+        if duration < 3:
             return self._on_hold()
 
         return self._on_long_hold()
@@ -75,7 +94,10 @@ class Nose:
 
     def stop_polling(self):
         self.kill_switch = True
-        self.thread.join()
+        try:
+            self.thread.join()
+        except:
+            pass
 
 if __name__ == '__main__':
     nose = Nose()

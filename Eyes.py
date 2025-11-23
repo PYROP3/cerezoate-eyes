@@ -119,7 +119,10 @@ class Eyes:
         self.display_dbg(f'Loading...\nLoaded {len(self.images)}')
 
     def cleanup(self):
-        self.display_dbg('Exit...')
+        try:
+            self.display_dbg('Exit...')
+        except:
+            pass
         self.disp.module_exit()
 
     def next_eyes(self):
@@ -163,14 +166,12 @@ class Eyes:
             frame %= len(img)
 
             now = time.time()
-            frame_delay = duration + start_time - now + frame_debt
+            frame_delay = duration + start_time - now
             if frame_delay > 0:
                 time.sleep(frame_delay)
             else:
                 logging.warning('Too long displaying frame: %.2f vs %.2f', now - start_time, duration)
                 frame_debt += frame_delay
-        
-        self.cleanup()
 
     def display_thread(self):
         self.thread_l = threading.Thread(target=self.display_loop, args=(True,))
@@ -182,6 +183,8 @@ class Eyes:
         self.kill_switch = True
         self.thread_l.join()
         self.thread_r.join()
+        
+        self.cleanup()
 
 if __name__ == '__main__':
     try:

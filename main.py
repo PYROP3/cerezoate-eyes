@@ -7,6 +7,7 @@ logging.basicConfig()
 
 nose = Nose()
 eyes = Eyes(nose)
+nose.set_eyes(eyes)
 
 if __name__ == '__main__':
     eyes.display_thread()
