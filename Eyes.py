@@ -19,7 +19,6 @@ class Eyes:
     def __init__(self, nose):
         self.images = []
         self.idx = 0
-        self.changed = False
         self.nose = nose
         self.nose.on_click = self.next_eyes
         self.kill_switch = False
@@ -126,41 +125,63 @@ class Eyes:
     def next_eyes(self):
         self.idx += 1
         self.idx %= len(self.images)
-        self.changed = True
 
-    def display_loop(self):
-        gif_idx_l = 0
-        gif_idx_r = 0
+    def display_loop(self, left):
+
+        def get_next_frame(img, current_frame, frame_debt):
+            while frame_debt > 0:
+                _, duration = img[current_frame]
+                frame_debt -= duration
+
+                current_frame += 1
+                current_frame %= len(img)
+                # self.log.debug('Skipping frame...')
+            return current_frame, frame_debt
+
+        last_idx = self.idx
+        frame = 0
+        frame_debt = 0
         img_l, img_r = self.images[self.idx]
+        img = img_l if left else img_r
 
         while not self.kill_switch:
-            if self.changed:
+            if last_idx != self.idx:
                 img_l, img_r = self.images[self.idx]
-                gif_idx_l = 0
-                gif_idx_r = 0
-                self.changed = False
+                img = img_l if left else img_r
+                frame = 0
+                last_idx = self.idx
+
+            start_time = time.time()
+
+            frame, frame_debt = get_next_frame(img, frame, frame_debt)
+            duration = img[frame][1]
 
             # logging.debug(f'Passing {len(img_l[gif_idx_l])} blocks')
-            self.disp.ShowImageRaw(img_l[gif_idx_l][0], True)
-            self.disp.ShowImageRaw(img_r[gif_idx_r][0], False)
+            self.disp.ShowImageRaw(img[frame][0], left)
 
-            gif_idx_l += 1
-            gif_idx_r += 1
+            frame += 1
+            frame %= len(img)
 
-            gif_idx_l %= len(img_l)
-            gif_idx_r %= len(img_r)
-
-            time.sleep(img_l[gif_idx_l][1]) # TODO may have to split in two threads if durations are different
+            now = time.time()
+            frame_delay = duration + start_time - now + frame_debt
+            if frame_delay > 0:
+                time.sleep(frame_delay)
+            else:
+                logging.warning('Too long displaying frame: %.2f vs %.2f', now - start_time, duration)
+                frame_debt += frame_delay
         
         self.cleanup()
 
     def display_thread(self):
-        self.thread = threading.Thread(target=self.display_loop)
-        self.thread.start()
+        self.thread_l = threading.Thread(target=self.display_loop, args=(True,))
+        self.thread_r = threading.Thread(target=self.display_loop, args=(False,))
+        self.thread_l.start()
+        self.thread_r.start()
 
     def stop_display(self):
         self.kill_switch = True
-        self.thread.join()
+        self.thread_l.join()
+        self.thread_r.join()
 
 if __name__ == '__main__':
     try:
