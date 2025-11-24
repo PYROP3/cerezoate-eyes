@@ -152,6 +152,7 @@ class Eyes:
         frame_debt = 0
         img_l, img_r = self.images[self.idx]
         img = img_l if left else img_r
+        warned = False
 
         while not self.kill_switch:
             if last_idx != self.idx:
@@ -159,6 +160,7 @@ class Eyes:
                 img = img_l if left else img_r
                 frame = 0
                 last_idx = self.idx
+                warned = False
 
             start_time = time.time()
 
@@ -176,7 +178,10 @@ class Eyes:
             if frame_delay > 0:
                 time.sleep(frame_delay)
             else:
-                logging.warning('Too long displaying frame: %.2f vs %.2f', now - start_time, duration)
+                if not warned:
+                    logging.warning('Too long displaying frame: %.2f vs %.2f', now - start_time, duration)
+                    # TODO add notification to OLED?
+                    warned = True
                 frame_debt += frame_delay
 
     def display_thread(self):
