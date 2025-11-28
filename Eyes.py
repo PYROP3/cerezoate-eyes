@@ -12,19 +12,23 @@ sys.path.append(".")
 from lib import LCD_1inch28_dual
 from PIL import Image,ImageDraw,ImageFont
 
+from Util import EyesData
+
 # Raspberry Pi pin configuration:
 logging.basicConfig(level=logging.DEBUG)
 
 class Eyes:
-    def __init__(self, nose, oled):
-        self.images = []
-        self.idx = 0
-        self.nose = nose
-        self.oled = oled
-        self.nose.on_click = self.next_eyes
+    def __init__(self, brain):
+        self.brain = brain
+        self.key = None
         self.kill_switch = False
         self.init_disp()
-        self.load_images()
+        
+        self.eyes_data = {}
+
+    def load_eyes_data(self, eyes_data: dict[str, EyesData]):
+        self.eyes_data = eyes_data
+        self.key = sorted(list(eyes_data.keys()))[0]
 
     def init_disp(self):
         self.disp = LCD_1inch28_dual.LCD_1inch28_Dual()
@@ -49,91 +53,12 @@ class Eyes:
         self.disp.ShowImageEqual(image.rotate(90))
         # self.disp.ShowImage(image, False)
 
-    def _frame_to_np(self, image: Image.Image) -> list:
-        if image.size != (240, 240):
-            image = image.resize((240, 240), resample=Image.Resampling.BICUBIC)
-        img = np.asarray(image)
-        # logging.debug('img.shape=%s, dtype=%s', img.shape, img.dtype)
-        pix = np.zeros((image.size[0],image.size[1],2), dtype = np.uint8)
-        pix[...,[0]] = np.add(np.bitwise_and(img[...,[0]],0xF8),np.right_shift(img[...,[1]],5))
-        pix[...,[1]] = np.add(np.bitwise_and(np.left_shift(img[...,[1]],3),0xE0),np.right_shift(img[...,[2]],3))
-        # logging.debug('Pix.shape=%s', pix.shape)
-        data = pix.flatten().tolist()
-        result = []
-        for i in range(0,len(data),4096):
-            result.append(data[i:i+4096])
-            # logging.debug('i = %d, len=%d', i, len(data[i:i+4096]))
-        # logging.debug('first block: %s', result[0][1019])
-        return result
-
-    def _preprocess_file(self, file):
-        if file[-3:] not in ('gif', 'png'):
-            return None, None
-        image = Image.open(file)
-        frame_data = []
-        duration = 0.
-        n_frames = image.n_frames
-        for index in range(1, n_frames):
-            image.seek(index)
-            frame_duration = image.info['duration']
-            # if frame_duration == 0:
-            frame_data.append((self._frame_to_np(image.rotate(180)), frame_duration / 1000.))
-            # logging.debug('[load] frame %d -> %d', index, len(frame_data[-1][0]))
-            duration += frame_duration
-        logging.debug('[load] %s: %d frames; %.2fs', file, len(frame_data), duration / 1000.)
-        return frame_data
-
-    def _load_folder(self, folder):
-        for eye in sorted(os.listdir(f'eyes/{folder}')):
-            logging.debug(f'Checking {folder}/{eye}')
-            files = os.listdir(f'eyes/{folder}/{eye}')
-            if len(files) == 1: # The same for both eyes
-                frame_data = self._preprocess_file(f'eyes/{folder}/{eye}/{files[0]}')
-                if frame_data is None:
-                    continue
-                self.images.append((frame_data, frame_data))
-                continue
-
-            frame_data_l = None
-            frame_data_r = None
-
-            for file in files:
-                frame_data = self._preprocess_file(f'eyes/{folder}/{eye}/{file}')
-                if 'left' in file:
-                    frame_data_l = frame_data
-                else:
-                    frame_data_r = frame_data
-
-            self.images.append((frame_data_l, frame_data_r))
-
-    def load_images(self):
-        message = 'Welcome Cerezoate~\n\nLoading...\n'
-        self.oled.on_state_update('loading', True)
-        if self.nose.ad_mode:
-            message += 'AD ON >:3'
-
-        self.display_dbg(message)
-
-        self._load_folder('normal')
-
-        if self.nose.ad_mode:
-            self._load_folder('AD')
-
-        self.oled.on_state_update('loading', False)
-        self.oled.on_state_update('loaded', len(self.images))
-        self.display_dbg(f'Loading...\nLoaded {len(self.images)}')
-
-    def cleanup(self):
+    def _cleanup(self):
         try:
             self.display_dbg('Exit...')
         except:
             pass
         self.disp.module_exit()
-
-    def next_eyes(self):
-        self.idx += 1
-        self.idx %= len(self.images)
-        self.oled.on_state_update('eye', self.idx)
 
     def display_loop(self, left):
 
@@ -147,19 +72,19 @@ class Eyes:
                 # self.log.debug('Skipping frame...')
             return current_frame, frame_debt
 
-        last_idx = self.idx
+        last_key = self.key
         frame = 0
         frame_debt = 0
-        img_l, img_r = self.images[self.idx]
-        img = img_l if left else img_r
+        eye_data = self.eyes_data[self.key]
+        img = eye_data.eye_l if left else eye_data.eye_r
         warned = False
 
         while not self.kill_switch:
-            if last_idx != self.idx:
-                img_l, img_r = self.images[self.idx]
-                img = img_l if left else img_r
+            if last_key != self.key:
+                eye_data = self.eyes_data[self.key]
+                img = eye_data.eye_l if left else eye_data.eye_r
                 frame = 0
-                last_idx = self.idx
+                last_key = self.key
                 warned = False
 
             start_time = time.time()
@@ -167,7 +92,7 @@ class Eyes:
             frame, frame_debt = get_next_frame(img, frame, frame_debt)
             duration = img[frame][1]
 
-            # logging.debug(f'Passing {len(img_l[gif_idx_l])} blocks')
+            # logging.debug(f'Passing {len(img_l[gif_key_l])} blocks')
             self.disp.ShowImageRaw(img[frame][0], left)
 
             frame += 1
@@ -184,18 +109,18 @@ class Eyes:
                     warned = True
                 frame_debt += frame_delay
 
-    def display_thread(self):
+    def start_display_threads(self):
         self.thread_l = threading.Thread(target=self.display_loop, args=(True,))
         self.thread_r = threading.Thread(target=self.display_loop, args=(False,))
         self.thread_l.start()
         self.thread_r.start()
 
-    def stop_display(self):
+    def keep_yourself_safe(self):
         self.kill_switch = True
         self.thread_l.join()
         self.thread_r.join()
         
-        self.cleanup()
+        self._cleanup()
 
 if __name__ == '__main__':
     try:

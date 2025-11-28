@@ -44,7 +44,6 @@ class OLED:
             self._text(draw, 'Fans: ' + ('ON ^3^' if self.info['fan'] else 'off x3x'), x=10, y=30)
             self._text(draw, f'Eyes: {self.info["eye"]}/{self.info["loaded"]}' + (' (loading)' if self.info['loading'] else ''), x=10, y=40)
 
-
     def display_raw(self, text):
         logging.info(f'display_raw: {text}')
 
