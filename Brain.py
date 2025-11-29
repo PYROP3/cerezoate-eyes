@@ -4,12 +4,12 @@ from luma.oled.device import ssd1306
 
 import numpy as np
 
-from Eyes import Eyes
 from Button import Button
-from Oled import OLED
 from Fans import Fans
-from Util import ImagesLoader, EyesData
+from Util import ImagesLoader
 from menu.MenuScreen import *
+
+import subprocess
 
 import logging
 
@@ -21,6 +21,8 @@ _oled_address=0x3c
 
 class Brain:
     def __init__(self):
+        self.bootstrapped = False
+
         self.button_x = Button(24, on_click=self._on_click_x, on_hold=self._on_hold_x, on_long_hold=self._on_long_hold_x)
         self.button_o = Button(23, on_click=self._on_click_o, on_hold=self._on_hold_o, on_long_hold=self._on_long_hold_o)
 
@@ -35,7 +37,8 @@ class Brain:
 
         logging.debug('Oled init')
 
-        self.eyes = Eyes(self)
+        # self.eyes = Eyes(self)
+        self.eyes = None
         self.eyes_data = {}
         self.current_eye_key = None
 
@@ -46,23 +49,27 @@ class Brain:
 
     def bootstrap(self):
         self.load_eyes()
-        self.eyes.load_eyes_data(self.eyes_data)
+        # self.eyes.load_eyes_data(self.eyes_data)
 
         self.menu_stack = [MainMenuScreen(self)]
         self.render_to_oled()
 
-        self.eyes.start_display_threads()
+        self.set_current_eye_key(sorted(list(self.eyes_data.keys()))[0])
+        self.bootstrapped = True
 
     def load_eyes(self):
         self.eyes_data = ImagesLoader().load_images(self.ad_mode)
 
     def keep_yourself_safe(self):
         import os
-        self.eyes.keep_yourself_safe()
+        # self.eyes.keep_yourself_safe()
+        if self.eyes is not None:
+            self.eyes.kill()
         os._exit(0)
 
     def eyes_dbg(self, text):
-        self.eyes.display_dbg(text)
+        pass
+    #     self.eyes.display_dbg(text)
 
     def exit_menu(self):
         if len(self.menu_stack) > 1:
@@ -76,6 +83,8 @@ class Brain:
 
     def _on_click_x(self):
         logging.info('Click X')
+        if not self.bootstrapped:
+            return
         self.menu_stack[-1].on_click_x()
         self.render_to_oled()
 
@@ -113,9 +122,15 @@ class Brain:
         return self.current_eye_key
 
     def stack_menu_screen(self, screen: BaseMenuScreen):
+        if not self.bootstrapped:
+            return
         self.menu_stack.append(screen)
         self.render_to_oled()
 
     def set_current_eye_key(self, key):
         self.current_eye_key = key
-        self.eyes.key = key
+        eye = self.eyes_data.get(key)
+        if self.eyes is not None:
+            self.eyes.kill()
+        self.eyes = subprocess.Popen(['/usr/bin/python', '/home/nyx/cerezoate/DisplayServer.py', eye.eye_l, eye.eye_r])
+        # self.eyes.change_eyes(key)

@@ -4,7 +4,7 @@ from PIL import Image
 class BaseMenuItem:
     def __init__(self, screen):
         self.screen = screen
-    
+
     def render(self, draw, position: tuple[int, int], highlighted: bool):
         pass
 
@@ -18,10 +18,18 @@ class TextMenuItem(BaseMenuItem):
         draw.text(position, self.text, fill='white')
 
 class IconMenuItem(BaseMenuItem):
-    def __init__(self, value: str, icon: Image, screen):
+    def __init__(self, value: str, icon: Image, screen, position=None, width=60, height=60):
         super().__init__(screen)
         self.icon = icon
         self.value = value
+        self.width = width
+        self.height = height
+        self.position = position
+
+    def render(self, draw, position: tuple[int, int], highlighted: bool):
+        position = self.position or position
+        draw.rectangle((position[0], position[1], position[0] + self.width + 4, position[1] + self.height + 4), outline='white' if highlighted else 'black', fill='black')
+        draw.bitmap((position[0], position[1]), self.icon)
 
 class IconMenuItemSlot(BaseMenuItem):
     def __init__(self, icons: dict[str, IconMenuItem], screen, position=None, width=24, height=24):

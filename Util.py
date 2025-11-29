@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 
 import logging
+import time
 
 class EyesData:
     def __init__(self, name: str, icon: Image, eye_l: np.array, eye_r: np.array):
@@ -43,7 +44,8 @@ class ImagesLoader:
             image.seek(index)
             frame_duration = image.info['duration']
             # if frame_duration == 0:
-            frame_data.append((self._frame_to_np(image.rotate(180)), frame_duration / 1000.))
+            # frame_data.append((self._frame_to_np(image.rotate(180)), frame_duration / 1000.))
+            frame_data.append((image.resize((240, 240), resample=Image.Resampling.BICUBIC).rotate(180), frame_duration / 1000.))
             # logging.debug('[load] frame %d -> %d', index, len(frame_data[-1][0]))
             duration += frame_duration
         logging.debug('[load] %s: %d frames; %.2fs', file, len(frame_data), duration / 1000.)
@@ -66,13 +68,14 @@ class ImagesLoader:
                     continue
 
                 if filename in ['both', 'left', 'right']:
-                    frame_data = self._preprocess_file(f'resources/eyes/{folder}/{eye}/{file}')
-                    if frame_data is None:
-                        continue
+                    # frame_data = self._preprocess_file(f'resources/eyes/{folder}/{eye}/{file}')
+                    # frame_data = Image.open(f'resources/eyes/{folder}/{eye}/{file}')
+                    # if frame_data is None:
+                    #     continue
                     if filename in ['both', 'left']:
-                        frame_data_l = frame_data
+                        frame_data_l = f'resources/eyes/{folder}/{eye}/{file}'
                     if filename in ['both', 'right']:
-                        frame_data_r = frame_data
+                        frame_data_r = f'resources/eyes/{folder}/{eye}/{file}'
 
             result[eye] = EyesData(eye, icon, frame_data_l, frame_data_r)
         return result
@@ -82,7 +85,17 @@ class ImagesLoader:
 
         if ad_mode:
             ad_result = self._load_folder('AD')
-            for key, eye in ad_result:
-                result[f'{key}[AD]'] = eye
+            for key, eye in ad_result.items():
+                result[f'{key} [AD]'] = eye
 
         return result
+
+class Profiler:
+    def __init__(self):
+        self.last_time = time.time()
+
+    def trig(self, key: str):
+        now = time.time()
+        diff = now - self.last_time
+        logging.debug(f'[PROFILER] {key} - {diff}')
+        self.last_time = now
